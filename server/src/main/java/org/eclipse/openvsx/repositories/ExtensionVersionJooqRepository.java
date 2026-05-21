@@ -16,6 +16,8 @@ import org.eclipse.openvsx.json.TargetPlatformVersionJson;
 import org.eclipse.openvsx.json.VersionTargetPlatformsJson;
 import org.eclipse.openvsx.util.TargetPlatform;
 import org.eclipse.openvsx.util.VersionAlias;
+
+import java.time.LocalDateTime;
 import org.jooq.Record;
 import org.jooq.*;
 import org.jooq.impl.DSL;
@@ -369,7 +371,7 @@ public class ExtensionVersionJooqRepository {
         return fetch(query);
     }
 
-    private SelectQuery<Record> findAllActive() {
+    private SelectQuery<Record> baseExtensionVersionQuery() {
         var query = dsl.selectQuery();
         query.addSelect(
                 NAMESPACE.ID,
@@ -394,6 +396,7 @@ public class ExtensionVersionJooqRepository {
                 EXTENSION_VERSION.VERSION,
                 EXTENSION_VERSION.POTENTIALLY_MALICIOUS,
                 EXTENSION_VERSION.TARGET_PLATFORM,
+                EXTENSION_VERSION.ACTIVE,
                 EXTENSION_VERSION.PREVIEW,
                 EXTENSION_VERSION.PRE_RELEASE,
                 EXTENSION_VERSION.TIMESTAMP,
@@ -415,14 +418,21 @@ public class ExtensionVersionJooqRepository {
                 EXTENSION_VERSION.QNA,
                 EXTENSION_VERSION.DEPENDENCIES,
                 EXTENSION_VERSION.BUNDLED_EXTENSIONS,
+                EXTENSION_VERSION.STATE,
+                EXTENSION_VERSION.LAST_UPDATED,
                 SIGNATURE_KEY_PAIR.PUBLIC_ID
         );
         query.addFrom(EXTENSION_VERSION);
         query.addJoin(EXTENSION, EXTENSION.ID.eq(EXTENSION_VERSION.EXTENSION_ID));
         query.addJoin(NAMESPACE, NAMESPACE.ID.eq(EXTENSION.NAMESPACE_ID));
         query.addJoin(PERSONAL_ACCESS_TOKEN, JoinType.LEFT_OUTER_JOIN, PERSONAL_ACCESS_TOKEN.ID.eq(EXTENSION_VERSION.PUBLISHED_WITH_ID));
-        query.addJoin(USER_DATA, USER_DATA.ID.eq(PERSONAL_ACCESS_TOKEN.USER_DATA));
+        query.addJoin(USER_DATA, JoinType.LEFT_OUTER_JOIN, USER_DATA.ID.eq(PERSONAL_ACCESS_TOKEN.USER_DATA));
         query.addJoin(SIGNATURE_KEY_PAIR, JoinType.LEFT_OUTER_JOIN, SIGNATURE_KEY_PAIR.ID.eq(EXTENSION_VERSION.SIGNATURE_KEY_PAIR_ID));
+        return query;
+    }
+
+    private SelectQuery<Record> findAllActive() {
+        var query = baseExtensionVersionQuery();
         query.addConditions(EXTENSION_VERSION.ACTIVE.eq(true));
         return query;
     }
@@ -1470,6 +1480,38 @@ public class ExtensionVersionJooqRepository {
                 .fetchOne("actual", Integer.class);
 
         return Objects.equals(actual, all);
+    }
+
+    public Page<ExtensionVersion> findChanges(LocalDateTime since, LocalDateTime before, int size, int offset) {
+        var conditions = new ArrayList<Condition>();
+        if (since != null) {
+            conditions.add(EXTENSION_VERSION.TIMESTAMP.greaterOrEqual(since));
+        }
+        if (before != null) {
+            conditions.add(EXTENSION_VERSION.TIMESTAMP.lessThan(before));
+        }
+
+        var countField = DSL.count();
+        var total = dsl.select(countField)
+                .from(EXTENSION_VERSION)
+                .where(conditions)
+                .fetchOne(countField);
+
+        var query = baseExtensionVersionQuery();
+        query.addConditions(conditions);
+        query.addOrderBy(EXTENSION_VERSION.TIMESTAMP.desc());
+        query.addLimit(size);
+        query.addOffset(offset);
+
+        var content = query.fetch().map(row -> {
+            var extVersion = toExtensionVersionFull(row);
+            extVersion.setActive(row.get(EXTENSION_VERSION.ACTIVE));
+            extVersion.setState(ExtensionVersion.State.valueOf(row.get(EXTENSION_VERSION.STATE)));
+            extVersion.setLastUpdated(row.get(EXTENSION_VERSION.LAST_UPDATED));
+            return extVersion;
+        });
+
+        return new PageImpl<>(content, Pageable.unpaged(), total != null ? total : 0);
     }
 
     private interface FieldMapper {

@@ -1904,6 +1904,156 @@ class RegistryAPITest {
     }
 
 
+    @Test
+    void testGetChanges() throws Exception {
+        var extVersion = mockExtensionVersionForChanges();
+        Mockito.when(repositories.findChanges(null, null, 100, 0))
+                .thenReturn(new PageImpl<>(List.of(extVersion), Pageable.unpaged(), 1));
+
+        mockMvc.perform(get("/api/-/changes"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(changesJson(c -> {
+                    var entry = new ChangeEntryJson();
+                    entry.setNamespace("foo");
+                    entry.setName("bar");
+                    entry.setVersion("1.0.0");
+                    entry.setTargetPlatform(TargetPlatform.NAME_UNIVERSAL);
+                    entry.setState("active");
+                    entry.setTimestamp("2000-01-01T10:00Z");
+                    entry.setLastUpdated("2000-01-01T10:00Z");
+                    c.setOffset(0);
+                    c.setTotalSize(1);
+                    c.setChanges(List.of(entry));
+                })));
+    }
+
+    @Test
+    void testGetChangesEmpty() throws Exception {
+        Mockito.when(repositories.findChanges(null, null, 100, 0))
+                .thenReturn(new PageImpl<>(Collections.emptyList(), Pageable.unpaged(), 0));
+
+        mockMvc.perform(get("/api/-/changes"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(changesJson(c -> {
+                    c.setOffset(0);
+                    c.setTotalSize(0);
+                    c.setChanges(Collections.emptyList());
+                })));
+    }
+
+    @Test
+    void testGetChangesInactiveVersion() throws Exception {
+        var extVersion = mockExtensionVersionForChanges();
+        extVersion.setActive(false);
+        extVersion.setState(ExtensionVersion.State.INACTIVE);
+        Mockito.when(repositories.findChanges(null, null, 100, 0))
+                .thenReturn(new PageImpl<>(List.of(extVersion), Pageable.unpaged(), 1));
+
+        mockMvc.perform(get("/api/-/changes"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(changesJson(c -> {
+                    var entry = new ChangeEntryJson();
+                    entry.setState("inactive");
+                    c.setChanges(List.of(entry));
+                })));
+    }
+
+    @Test
+    void testGetChangesWithPagination() throws Exception {
+        var extVersion = mockExtensionVersionForChanges();
+        Mockito.when(repositories.findChanges(null, null, 10, 5))
+                .thenReturn(new PageImpl<>(List.of(extVersion), Pageable.unpaged(), 20));
+
+        mockMvc.perform(get("/api/-/changes").param("size", "10").param("offset", "5"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(changesJson(c -> {
+                    c.setOffset(5);
+                    c.setTotalSize(20);
+                })));
+    }
+
+    @Test
+    void testGetChangesWithTimeFilter() throws Exception {
+        var extVersion = mockExtensionVersionForChanges();
+        var since = LocalDateTime.parse("2024-01-01T00:00:00");
+        var before = LocalDateTime.parse("2024-12-31T23:59:59");
+        Mockito.when(repositories.findChanges(since, before, 100, 0))
+                .thenReturn(new PageImpl<>(List.of(extVersion), Pageable.unpaged(), 1));
+
+        mockMvc.perform(get("/api/-/changes")
+                        .param("since", "2024-01-01T00:00:00Z")
+                        .param("until", "2024-12-31T23:59:59Z"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(changesJson(c -> {
+                    c.setTotalSize(1);
+                })));
+    }
+
+    @Test
+    void testGetChangesZeroSize() throws Exception {
+        Mockito.when(repositories.findChanges(null, null, 0, 0))
+                .thenReturn(new PageImpl<>(Collections.emptyList(), Pageable.unpaged(), 5));
+
+        mockMvc.perform(get("/api/-/changes").param("size", "0"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(changesJson(c -> {
+                    c.setTotalSize(5);
+                    c.setChanges(Collections.emptyList());
+                })));
+    }
+
+    @Test
+    void testGetChangesOnlySince() throws Exception {
+        var extVersion = mockExtensionVersionForChanges();
+        var since = LocalDateTime.parse("2024-01-01T00:00:00");
+        Mockito.when(repositories.findChanges(since, null, 100, 0))
+                .thenReturn(new PageImpl<>(List.of(extVersion), Pageable.unpaged(), 1));
+
+        mockMvc.perform(get("/api/-/changes").param("since", "2024-01-01T00:00:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(changesJson(c -> c.setTotalSize(1))));
+    }
+
+    @Test
+    void testGetChangesOnlyUntil() throws Exception {
+        var extVersion = mockExtensionVersionForChanges();
+        var before = LocalDateTime.parse("2024-12-31T23:59:59");
+        Mockito.when(repositories.findChanges(null, before, 100, 0))
+                .thenReturn(new PageImpl<>(List.of(extVersion), Pageable.unpaged(), 1));
+
+        mockMvc.perform(get("/api/-/changes").param("until", "2024-12-31T23:59:59Z"))
+                .andExpect(status().isOk())
+                .andExpect(content().json(changesJson(c -> c.setTotalSize(1))));
+    }
+
+    @Test
+    void testGetChangesNegativeSize() throws Exception {
+        mockMvc.perform(get("/api/-/changes").param("size", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().json(errorJson("The parameter 'size' must not be negative.")));
+    }
+
+    @Test
+    void testGetChangesNegativeOffset() throws Exception {
+        mockMvc.perform(get("/api/-/changes").param("offset", "-1"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().json(errorJson("The parameter 'offset' must not be negative.")));
+    }
+
+    @Test
+    void testGetChangesInvalidSince() throws Exception {
+        mockMvc.perform(get("/api/-/changes").param("since", "not-a-date"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().json(errorJson("Invalid 'since' parameter: not-a-date")));
+    }
+
+    @Test
+    void testGetChangesInvalidUntil() throws Exception {
+        mockMvc.perform(get("/api/-/changes").param("until", "not-a-date"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().json(errorJson("Invalid 'until' parameter: not-a-date")));
+    }
+
     //---------- UTILITY ----------//
 
     private void mockActiveVersion() {
@@ -2473,6 +2623,29 @@ class RegistryAPITest {
 
     private String successJson(String message) throws JsonProcessingException {
         var json = ResultJson.success(message);
+        return new ObjectMapper().writeValueAsString(json);
+    }
+
+    private ExtensionVersion mockExtensionVersionForChanges() {
+        var namespace = new Namespace();
+        namespace.setName("foo");
+        var extension = new Extension();
+        extension.setName("bar");
+        extension.setNamespace(namespace);
+        var extVersion = new ExtensionVersion();
+        extVersion.setVersion("1.0.0");
+        extVersion.setTargetPlatform(TargetPlatform.NAME_UNIVERSAL);
+        extVersion.setTimestamp(LocalDateTime.parse("2000-01-01T10:00"));
+        extVersion.setActive(true);
+        extVersion.setState(ExtensionVersion.State.ACTIVE);
+        extVersion.setLastUpdated(LocalDateTime.parse("2000-01-01T10:00"));
+        extVersion.setExtension(extension);
+        return extVersion;
+    }
+
+    private String changesJson(Consumer<ChangesResultJson> content) throws JsonProcessingException {
+        var json = new ChangesResultJson();
+        content.accept(json);
         return new ObjectMapper().writeValueAsString(json);
     }
 

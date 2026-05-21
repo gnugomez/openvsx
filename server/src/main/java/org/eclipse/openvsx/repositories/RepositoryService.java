@@ -444,6 +444,10 @@ public class RepositoryService {
         return extensionVersionJooqRepo.findActiveVersions(request);
     }
 
+    public Page<ExtensionVersion> findChanges(LocalDateTime since, LocalDateTime before, int size, int offset) {
+        return extensionVersionJooqRepo.findChanges(since, before, size, offset);
+    }
+
     public List<ExtensionVersion> findActiveExtensionVersions(Collection<Long> extensionIds, String targetPlatform) {
         return extensionVersionJooqRepo.findAllActiveByExtensionIdAndTargetPlatform(extensionIds, targetPlatform);
     }

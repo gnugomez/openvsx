@@ -40,6 +40,7 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.InputStream;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -1152,5 +1153,27 @@ public class LocalRegistryService implements IExtensionRegistry {
         var json = new RegistryVersionJson();
         json.setVersion(registryVersion);
         return json;
+    }
+
+    public ChangesResultJson getChanges(LocalDateTime since, LocalDateTime before, int size, int offset) {
+        var page = repositories.findChanges(since, before, size, offset);
+        var result = new ChangesResultJson();
+        result.setOffset(offset);
+        result.setTotalSize((int) page.getTotalElements());
+        result.setChanges(page.getContent().stream()
+                .map(ev -> {
+                    var entry = new ChangeEntryJson();
+                    entry.setNamespace(ev.getExtension().getNamespace().getName());
+                    entry.setName(ev.getExtension().getName());
+                    entry.setVersion(ev.getVersion());
+                    entry.setTargetPlatform(ev.getTargetPlatform());
+                    entry.setState(ev.getState().name().toLowerCase());
+                    entry.setTimestamp(TimeUtil.toUTCString(ev.getTimestamp()));
+                    entry.setLastUpdated(TimeUtil.toUTCString(ev.getLastUpdated()));
+                    entry.setExtension(ev.toExtensionJson());
+                    return entry;
+                })
+                .toList());
+        return result;
     }
 }

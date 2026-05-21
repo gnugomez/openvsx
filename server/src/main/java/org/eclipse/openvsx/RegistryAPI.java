@@ -36,6 +36,7 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 
 import java.io.InputStream;
 import java.net.URI;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -1356,6 +1357,63 @@ public class RegistryAPI {
         } else {
             return new ResponseEntity<>(json, HttpStatus.BAD_REQUEST);
         }
+    }
+
+    @GetMapping(
+        path = "/api/-/changes",
+        produces = MediaType.APPLICATION_JSON_VALUE
+    )
+    @CrossOrigin
+    @Operation(summary = "Provides a paginated feed of registry changes")
+    @ApiResponse(
+        responseCode = "200",
+        description = "The changes are returned in JSON format"
+    )
+    @ApiResponse(
+        responseCode = "400",
+        description = "The request contains an invalid parameter value"
+    )
+    public ResponseEntity<ChangesResultJson> getChanges(
+            @RequestParam(required = false)
+            @Parameter(description = "Only include changes at or after this timestamp (ISO-8601 UTC, e.g. 2024-01-01T00:00:00Z)")
+            String since,
+            @RequestParam(required = false)
+            @Parameter(description = "Only include changes before this timestamp, exclusive (ISO-8601 UTC, e.g. 2024-12-31T23:59:59Z)")
+            String until,
+            @RequestParam(defaultValue = "100")
+            @Parameter(description = "Maximal number of entries to return", schema = @Schema(type = "integer", minimum = "0", defaultValue = "100"))
+            int size,
+            @RequestParam(defaultValue = "0")
+            @Parameter(description = "Number of entries to skip (usually a multiple of the page size)", schema = @Schema(type = "integer", minimum = "0", defaultValue = "0"))
+            int offset
+    ) {
+        if (size < 0) {
+            return new ResponseEntity<>(ChangesResultJson.error(negativeParameterMessage("size")), HttpStatus.BAD_REQUEST);
+        }
+        if (offset < 0) {
+            return new ResponseEntity<>(ChangesResultJson.error(negativeOffsetMessage()), HttpStatus.BAD_REQUEST);
+        }
+
+        LocalDateTime sinceDate = null;
+        LocalDateTime untilDate = null;
+        if (since != null) {
+            try {
+                sinceDate = TimeUtil.fromUTCString(since);
+            } catch (Exception e) {
+                return new ResponseEntity<>(ChangesResultJson.error("Invalid 'since' parameter: " + since), HttpStatus.BAD_REQUEST);
+            }
+        }
+        if (until != null) {
+            try {
+                untilDate = TimeUtil.fromUTCString(until);
+            } catch (Exception e) {
+                return new ResponseEntity<>(ChangesResultJson.error("Invalid 'until' parameter: " + until), HttpStatus.BAD_REQUEST);
+            }
+        }
+
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noCache().cachePublic())
+                .body(local.getChanges(sinceDate, untilDate, size, offset));
     }
 
     @GetMapping(
