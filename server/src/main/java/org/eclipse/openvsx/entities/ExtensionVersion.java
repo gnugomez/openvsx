@@ -84,7 +84,7 @@ public class ExtensionVersion implements Serializable {
     @Enumerated(EnumType.STRING)
     private State state = State.ACTIVE;
 
-    private LocalDateTime lastUpdated;
+    private LocalDateTime lastUpdated = TimeUtil.getCurrentUTC();
 
     private boolean potentiallyMalicious;
 
