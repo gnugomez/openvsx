@@ -372,6 +372,7 @@ class RepositoryServiceSmokeTest {
                 () -> repositories.hasScanCheckResult(1L, "SECRET_SCANNING"),
                 () -> repositories.findScanCheckResults(scan),
                 () -> repositories.findScanCheckResultsByScanId(1L),
+                () -> repositories.findChanges(NOW.minusYears(1), NOW.plusYears(1), 10, 0),
                 // Extension version lookup including inactive
                 () -> repositories.findExtensionVersionIncludingInactive(namespace.getName(), extension.getName(), extVersion.getTargetPlatform(), extVersion.getVersion()),
                 // Rate limit tests

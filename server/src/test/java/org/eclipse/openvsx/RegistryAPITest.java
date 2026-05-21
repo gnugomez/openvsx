@@ -1954,6 +1954,7 @@ class RegistryAPITest {
                 .andExpect(content().json(changesJson(c -> {
                     var entry = new ChangeEntryJson();
                     entry.setState("inactive");
+                    c.setTotalSize(1);
                     c.setChanges(List.of(entry));
                 })));
     }
