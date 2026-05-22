@@ -1167,7 +1167,7 @@ public class LocalRegistryService implements IExtensionRegistry {
                     entry.setName(ev.getExtension().getName());
                     entry.setVersion(ev.getVersion());
                     entry.setTargetPlatform(ev.getTargetPlatform());
-                    entry.setState(ev.getState().name().toLowerCase());
+                    entry.setState(ev.getState().name());
                     entry.setTimestamp(TimeUtil.toUTCString(ev.getTimestamp()));
                     entry.setLastUpdated(TimeUtil.toUTCString(ev.getLastUpdated()));
                     entry.setExtension(ev.toExtensionJson());

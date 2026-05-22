@@ -1918,7 +1918,7 @@ class RegistryAPITest {
                     entry.setName("bar");
                     entry.setVersion("1.0.0");
                     entry.setTargetPlatform(TargetPlatform.NAME_UNIVERSAL);
-                    entry.setState("active");
+                    entry.setState("ACTIVE");
                     entry.setTimestamp("2000-01-01T10:00Z");
                     entry.setLastUpdated("2000-01-01T10:00Z");
                     c.setOffset(0);
@@ -1953,7 +1953,7 @@ class RegistryAPITest {
                 .andExpect(status().isOk())
                 .andExpect(content().json(changesJson(c -> {
                     var entry = new ChangeEntryJson();
-                    entry.setState("inactive");
+                    entry.setState("INACTIVE");
                     c.setTotalSize(1);
                     c.setChanges(List.of(entry));
                 })));
