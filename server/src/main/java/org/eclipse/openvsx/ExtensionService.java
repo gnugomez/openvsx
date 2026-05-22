@@ -207,6 +207,9 @@ public class ExtensionService {
         var affectedExtensions = new LinkedHashSet<Extension>();
         var versions = repositories.findVersionsByUser(user, false);
         for (var version : versions) {
+            if (version.getState() == ExtensionVersion.State.DELETED) {
+                continue;
+            }
             version.setActive(true);
             affectedExtensions.add(version.getExtension());
         }
@@ -225,10 +228,20 @@ public class ExtensionService {
         var results = new ArrayList<ResultJson>();
         if(repositories.isDeleteAllVersions(namespaceName, extensionName, targetVersions, user)) {
             var extension = repositories.findExtension(extensionName, namespaceName);
+            if (extension == null || repositories.countVersions(namespaceName, extensionName) == 0) {
+                var message = "Extension not found: " + NamingUtil.toExtensionId(namespaceName, extensionName);
+                throw new ErrorResultException(message, HttpStatus.NOT_FOUND);
+            }
             results.add(deleteExtension(user, extension));
         } else {
             for (var targetVersion : targetVersions) {
-                var extVersion = repositories.findVersion(user, targetVersion.version(), targetVersion.targetPlatform(), extensionName, namespaceName);
+                var extVersion = repositories.findVersion(
+                        user,
+                        targetVersion.version(),
+                        targetVersion.targetPlatform(),
+                        extensionName,
+                        namespaceName
+                );
                 if (extVersion == null) {
                     var message = "Extension not found: " + NamingUtil.toLogFormat(namespaceName, extensionName, targetVersion.targetPlatform(), targetVersion.version());
                     throw new ErrorResultException(message, HttpStatus.NOT_FOUND);
@@ -275,8 +288,7 @@ public class ExtensionService {
             cache.evictExtensionJsons(deprecatedExtension);
         }
 
-        entityManager.remove(extension);
-        search.removeSearchEntry(extension);
+        updateExtension(extension);
 
         var result = ResultJson.success("Deleted " + NamingUtil.toExtensionId(extension));
         logs.logAction(user, result);
@@ -286,7 +298,6 @@ public class ExtensionService {
     protected ResultJson deleteExtension(UserData user, ExtensionVersion extVersion) {
         var extension = extVersion.getExtension();
         removeExtensionVersion(extVersion);
-        extension.getVersions().remove(extVersion);
         updateExtension(extension);
 
         var result = ResultJson.success("Deleted " + NamingUtil.toLogFormat(extVersion));
@@ -301,6 +312,6 @@ public class ExtensionService {
         
         repositories.findFiles(extVersion).map(RemoveFileJobRequest::new).forEach(scheduler::enqueue);
         repositories.deleteFiles(extVersion);
-        entityManager.remove(extVersion);
+        extVersion.setState(ExtensionVersion.State.DELETED);
     }
 }

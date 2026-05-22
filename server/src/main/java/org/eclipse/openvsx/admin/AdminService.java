@@ -164,8 +164,7 @@ public class AdminService {
             cache.evictExtensionJsons(deprecatedExtension);
         }
 
-        entityManager.remove(extension);
-        search.removeSearchEntry(extension);
+        extensions.updateExtension(extension);
         logs.logAction(admin, ResultJson.success("Deleted " + NamingUtil.toExtensionId(extension)));
     }
 
@@ -177,7 +176,6 @@ public class AdminService {
         }
 
         removeExtensionVersion(extVersion);
-        extension.getVersions().remove(extVersion);
         extensions.updateExtension(extension);
         logs.logAction(admin, ResultJson.success("Deleted " + NamingUtil.toLogFormat(extVersion)));
     }
@@ -208,7 +206,7 @@ public class AdminService {
     public ResultJson deleteExtension(String namespaceName, String extensionName, UserData admin)
             throws ErrorResultException {
         var extension = repositories.findExtension(extensionName, namespaceName);
-        if (extension == null) {
+        if (extension == null || repositories.countVersions(namespaceName, extensionName) == 0) {
             var extensionId = NamingUtil.toExtensionId(namespaceName, extensionName);
             throw new ErrorResultException("Extension not found: " + extensionId, HttpStatus.NOT_FOUND);
         }
@@ -259,8 +257,7 @@ public class AdminService {
             cache.evictExtensionJsons(deprecatedExtension);
         }
 
-        entityManager.remove(extension);
-        search.removeSearchEntry(extension);
+        extensions.updateExtension(extension);
 
         var result = ResultJson.success("Deleted " + NamingUtil.toExtensionId(extension));
         logs.logAction(admin, result);
@@ -270,7 +267,6 @@ public class AdminService {
     protected ResultJson deleteExtension(ExtensionVersion extVersion, UserData admin) {
         var extension = extVersion.getExtension();
         removeExtensionVersion(extVersion);
-        extension.getVersions().remove(extVersion);
         extensions.updateExtension(extension);
 
         var result = ResultJson.success("Deleted " + NamingUtil.toLogFormat(extVersion));
@@ -323,7 +319,7 @@ public class AdminService {
         
         repositories.findFiles(extVersion).map(RemoveFileJobRequest::new).forEach(scheduler::enqueue);
         repositories.deleteFiles(extVersion);
-        entityManager.remove(extVersion);
+        extVersion.setState(ExtensionVersion.State.DELETED);
     }
 
     private String userNotFoundMessage(String user) {

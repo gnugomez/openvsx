@@ -685,6 +685,12 @@ public class ExtensionScanCompletionService implements JobRequestHandler<Handler
                     detachedVersion.getId(), scan.getId());
                 return false;
             }
+
+            if (extVersion.getState() == ExtensionVersion.State.DELETED) {
+                logger.warn("Cannot activate deleted extension version for scan #{}: {}",
+                    scan.getId(), NamingUtil.toLogFormat(extVersion));
+                return false;
+            }
             
             // Already active - just mark scan passed
             if (extVersion.isActive()) {
